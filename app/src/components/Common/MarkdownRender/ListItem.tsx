@@ -146,8 +146,44 @@ export const ListItem: React.FC<ListItemProps> = ({ children, content, onChange,
     return allChildrenChecked ? 'line-through text-desc' : '';
   };
 
+  const computeLineHash = () => {
+    const key = `]${taskText}`;
+    const index = content.indexOf(key);
+    if (index === -1) return null;
+    const start = index - 4;
+    if (start < 0) return null;
+    const mark = content.slice(start, index + key.length).trim();
+    function sha1(str: string) {
+      const utf8 = new TextEncoder().encode(str);
+      let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+      const ml = utf8.length * 8;
+      const withOne = new Uint8Array(((utf8.length + 9 + 63) >> 6) << 6);
+      withOne.set(utf8);
+      withOne[utf8.length] = 0x80;
+      const dv = new DataView(withOne.buffer);
+      dv.setUint32(withOne.length - 4, ml >>> 0);
+      for (let i = 0; i < withOne.length; i += 64) {
+        const w = new Uint32Array(80);
+        for (let j = 0; j < 16; j++) w[j] = dv.getUint32(i + j * 4);
+        for (let j = 16; j < 80; j++) w[j] = ((w[j-3] ^ w[j-8] ^ w[j-14] ^ w[j-16]) << 1) | (((w[j-3] ^ w[j-8] ^ w[j-14] ^ w[j-16]) >>> 31) & 1);
+        let a = h0, b = h1, c = h2, d = h3, e = h4;
+        for (let j = 0; j < 80; j++) {
+          const f = j < 20 ? ((b & c) | (~b & d)) : j < 40 ? (b ^ c ^ d) : j < 60 ? ((b & c) | (b & d) | (c & d)) : (b ^ c ^ d);
+          const k = j < 20 ? 0x5A827999 : j < 40 ? 0x6ED9EBA1 : j < 60 ? 0x8F1BBCDC : 0xCA62C1D6;
+          const temp = (((a << 5) | (a >>> 27)) + f + e + k + w[j]) >>> 0;
+          e = d; d = c; c = ((b << 30) | (b >>> 2)) >>> 0; b = a; a = temp;
+        }
+        h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+      }
+      function hex(n: number) { return n.toString(16).padStart(8, '0'); }
+      return hex(h0) + hex(h1) + hex(h2) + hex(h3) + hex(h4);
+    }
+    return sha1(mark);
+  };
+  const lineHash = computeLineHash();
+
   return (
-    <li className={`${className} !list-none`}>
+    <li className={`${className} !list-none`} id={lineHash ? `task-${lineHash}` : undefined}>
       <div 
         className='flex items-start gap-1 -ml-[15px] cursor-pointer justify-center'
         onClick={handleToggle}
@@ -169,4 +205,4 @@ export const ListItem: React.FC<ListItemProps> = ({ children, content, onChange,
       </div>
     </li>
   );
-}; 
+};

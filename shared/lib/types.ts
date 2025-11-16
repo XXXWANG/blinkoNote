@@ -101,6 +101,11 @@ export const ZConfigKey = z.union([
   z.literal('aiSmartEditPrompt'),
   z.literal('globalPrompt'),
   ZUserPerferConfigKey,
+  z.literal('webdavUrl'),
+  z.literal('webdavUsername'),
+  z.literal('webdavPassword'),
+  z.literal('webdavRootPath'),
+  z.literal('webdavEnable'),
   z.any()
 ]);
 
@@ -186,6 +191,11 @@ export const ZConfigSchema = z.object({
   defaultHomePage: z.string().optional(),
   desktopHotkeys: z.any().optional(),
   systemTray: z.any().optional(),
+  webdavUrl: z.string().optional(),
+  webdavUsername: z.string().optional(),
+  webdavPassword: z.string().optional(),
+  webdavRootPath: z.string().optional(),
+  webdavEnable: z.boolean().optional(),
 });
 
 export type GlobalConfig = z.infer<typeof ZConfigSchema>;

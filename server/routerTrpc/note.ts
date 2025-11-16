@@ -14,6 +14,8 @@ import { Context } from '../context';
 import { cache } from '@shared/lib/cache';
 import { AiModelFactory } from '@server/aiServer/aiModelFactory';
 import { authProcedure, demoAuthMiddleware, publicProcedure, router } from '@server/middleware';
+import crypto from 'crypto';
+import { extractTodos, computeLineHash } from '../lib/todoSync';
 
 const extractHashtags = (input: string): string[] => {
   const withoutCodeBlocks = input.replace(/```[\s\S]*?```/g, '');
@@ -21,6 +23,76 @@ const extractHashtags = (input: string): string[] => {
   const matches = withoutCodeBlocks.match(hashtagRegex);
   return matches ? matches : [];
 };
+
+async function syncTodosForNote(params: { noteId: number; accountId: number; content: string }) {
+  const { noteId, accountId, content } = params;
+  const todos = extractTodos(content);
+  const existing = await prisma.notes.findMany({
+    where: {
+      accountId,
+      type: NoteType.TODO,
+      references: { some: { toNoteId: noteId } },
+    },
+    select: { id: true, metadata: true },
+  });
+  const map = new Map<string, { id: number; meta: any }>();
+  for (const i of existing) {
+    const meta = i.metadata as any;
+    const hash = meta?.lineHash;
+    if (hash) map.set(hash, { id: i.id, meta });
+  }
+
+  const seen = new Set<string>();
+  for (const t of todos) {
+    seen.add(t.hash);
+    if (map.has(t.hash)) {
+      const cur = map.get(t.hash)!;
+      await prisma.notes.update({
+        where: { id: cur.id },
+        data: { content: t.text, metadata: { ...(cur.meta || {}), originNoteId: noteId, lineHash: t.hash, checked: t.checked } },
+      });
+    } else {
+      const created = await prisma.notes.create({
+        data: { content: t.text, type: NoteType.TODO, accountId, metadata: { originNoteId: noteId, lineHash: t.hash, checked: t.checked } },
+      });
+      await prisma.noteReference.create({ data: { fromNoteId: created.id, toNoteId: noteId } });
+    }
+  }
+
+  for (const [hash, cur] of map.entries()) {
+    if (!seen.has(hash)) {
+      await prisma.notes.update({ where: { id: cur.id }, data: { isRecycle: true } });
+    }
+  }
+}
+
+async function reflectTodoToOriginNote(params: { todoNoteId: number; accountId: number }) {
+  const { todoNoteId, accountId } = params;
+  const todo = await prisma.notes.findFirst({ where: { id: todoNoteId, accountId }, select: { content: true, metadata: true, references: true } });
+  if (!todo) return;
+  const meta = todo.metadata as any;
+  const toRef = todo.references?.find((r) => r.toNoteId);
+  const originId = meta?.originNoteId || toRef?.toNoteId;
+  const lineHash = meta?.lineHash;
+  if (!originId || !lineHash) return;
+  const origin = await prisma.notes.findFirst({ where: { id: originId, accountId }, select: { content: true } });
+  if (!origin) return;
+  const lines = (origin.content || '').split(/\r?\n/);
+  let changed = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const hash = computeLineHash(line);
+    if (hash === lineHash) {
+      const checkedFlag = meta?.checked ? 'x' : ' ';
+      lines[i] = line.replace(/^\s*[-*]\s*\[( |x|X)\]\s*(.*)$/, `- [${checkedFlag}] ${todo.content || ''}`);
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return;
+  const newContent = lines.join('\n');
+  await prisma.notes.update({ where: { id: originId }, data: { content: newContent } });
+}
 
 export const noteRouter = router({
   list: authProcedure
@@ -1002,7 +1074,12 @@ export const noteRouter = router({
           : { id, accountId: Number(ctx.id) }; // Filter by ID and accountId for owners
 
         const note = await prisma.notes.update({ where: whereClause, data: update });
-        if (content == null) return;
+        if (note.type === NoteType.TODO && typeof note.metadata === 'object' && note.metadata && note.metadata['originNoteId']) {
+          await reflectTodoToOriginNote({ todoNoteId: note.id, accountId: Number(ctx.id) });
+        }
+        if (content == null) {
+          return note;
+        }
         const oldTagsInThisNote = await prisma.tagsToNote.findMany({ where: { noteId: note.id }, include: { tag: true } });
         await handleAddTags(tagTree, undefined, note.id);
         const oldTags = oldTagsInThisNote.map((i) => i.tag).filter((i) => !!i);
@@ -1111,6 +1188,7 @@ export const noteRouter = router({
         }
 
         SendWebhook({ ...note, attachments }, isRecycle ? 'delete' : 'update', ctx);
+        await syncTodosForNote({ noteId: note.id, accountId: Number(ctx.id), content: note.content });
         return note;
       } else {
         try {
@@ -1208,6 +1286,7 @@ export const noteRouter = router({
 
           SendWebhook({ ...note, attachments }, 'create', ctx);
 
+          await syncTodosForNote({ noteId: note.id, accountId: Number(ctx.id), content: note.content });
           return note;
         } catch (error) {
           console.log(error);

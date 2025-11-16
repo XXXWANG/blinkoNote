@@ -16,6 +16,7 @@ import { AvatarAccount, CommentButton, UserAvatar } from './commentButton';
 import { HistoryButton } from '../BlinkoNoteHistory/HistoryButton';
 import { api } from '@/lib/trpc';
 import { PromiseCall } from '@/store/standard/PromiseState';
+import { useMemo } from 'react';
 
 interface CardHeaderProps {
   blinkoItem: Note;
@@ -130,6 +131,23 @@ export const CardHeader = observer(({ blinkoItem, blinko, isShareMode, isExpande
             }
           </div>
         </Tooltip>
+
+        {blinkoItem.type === NoteType.TODO && blinkoItem?.metadata?.originNoteId && blinkoItem?.metadata?.lineHash && (
+          <Tooltip content={t('view-source-note')}>
+            <div
+              className={"cursor-pointer text-desc ml-2 opacity-0 group-hover/card:opacity-100 group-hover/card:translate-x-0 translate-x-1"}
+              onClick={(e) => {
+                e.stopPropagation();
+                const id = blinkoItem.metadata.originNoteId;
+                const anchor = blinkoItem.metadata.lineHash;
+                const url = `${window.location.origin}/detail?id=${id}&anchor=${anchor}`;
+                window.open(url, '_blank');
+              }}
+            >
+              <Icon icon="mdi:link-variant" width={iconSize} height={iconSize} />
+            </div>
+          </Tooltip>
+        )}
 
         <Copy
           size={16}

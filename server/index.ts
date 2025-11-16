@@ -25,6 +25,7 @@ import pluginRouter from './routerExpress/file/plugin';
 import rssRouter from './routerExpress/rss';
 import openaiRouter from './routerExpress/openai';
 import mcpRouter from './routerExpress/mcp';
+import webdavRouter from './routerExpress/sync/webdav';
 
 // Vite integration
 import ViteExpress from 'vite-express';
@@ -151,6 +152,7 @@ async function setupApiRoutes(app: express.Application) {
   // Other API endpoints
   app.use('/api/rss', rssRouter);
   app.use('/v1', openaiRouter);
+  app.use('/api/sync/webdav', webdavRouter);
 
   // OpenAPI documentation endpoints
   app.get('/api/openapi.json', (req, res) => {

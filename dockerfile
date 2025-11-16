@@ -45,13 +45,7 @@ RUN printf '#!/bin/sh\necho "Current Environment: $NODE_ENV"\nnpx prisma migrate
     chmod +x start.sh
 
 
-FROM node:20-alpine as init-downloader
-
-WORKDIR /app
-
-RUN wget -qO /app/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.5/dumb-init_1.2.5_$(uname -m) && \
-    chmod +x /app/dumb-init && \
-    rm -rf /var/cache/apk/*
+ 
 
 
 # Runtime Stage - Using Alpine as required
@@ -87,8 +81,6 @@ COPY --from=builder /app/server/lute.min.js ./server/lute.min.js
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma/client ./node_modules/.prisma/client
 COPY --from=builder /app/start.sh ./
-COPY --from=init-downloader /app/dumb-init /usr/local/bin/dumb-init
-
 RUN chmod +x ./start.sh && \
     ls -la start.sh
 
@@ -101,20 +93,12 @@ RUN if [ "$(uname -m)" = "aarch64" ] || [ "$(uname -m)" = "arm64" ]; then \
     fi
 
 # Install dependencies with --ignore-scripts to skip native compilation
-RUN echo "Installing additional dependencies..." && \
-    npm install @node-rs/crc32 lightningcss sharp@0.34.1 prisma@5.21.1 && \
-    npm install -g prisma@5.21.1 && \
-    npm install sqlite3@5.1.7 && \
-    npm install llamaindex @langchain/community@0.3.40 && \
-    npm install @libsql/client @libsql/core && \
-    npx prisma generate && \
-    # find / -type d -name "onnxruntime-*" -exec rm -rf {} + 2>/dev/null || true && \
-    # npm cache clean --force && \
-    rm -rf /tmp/* && \
-    apk del python3 py3-setuptools make g++ gcc libc-dev linux-headers && \
-    rm -rf /var/cache/apk/* /root/.npm /root/.cache
+RUN echo "Install minimal runtime deps for libsql & sharp & langchain & crc32 & sqlite3" && \
+    npm install @libsql/client @libsql/core @libsql/linux-x64-musl sharp@0.34.1 @langchain/community@0.3.40 llamaindex @node-rs/crc32 sqlite3@5.1.7 && \
+    apk del python3 py3-setuptools make g++ gcc libc-dev linux-headers || true && \
+    rm -rf /var/cache/apk/* /root/.npm /root/.cache || true
 
 # Expose Port (Adjust According to Actual Application)
 EXPOSE 1111
 
-CMD ["/usr/local/bin/dumb-init", "--", "/bin/sh", "-c", "./start.sh"]
+CMD ["/bin/sh", "-c", "./start.sh"]

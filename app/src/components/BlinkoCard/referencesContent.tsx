@@ -8,9 +8,11 @@ import { Icon } from '@/components/Common/Iconify/icons'
 import { cn } from "@heroui/theme"
 import { Tooltip } from "@heroui/react"
 import { useTranslation } from "react-i18next"
+import { NoteType } from "@shared/lib/types"
 
 export const ReferencesContent = ({ blinkoItem, className }: { blinkoItem: BlinkoItem, className?: string }) => {
   const { t } = useTranslation()
+  if (blinkoItem.type === NoteType.TODO) return null
   if (!blinkoItem.references || blinkoItem.references?.length == 0 && (!blinkoItem.referencedBy || blinkoItem.referencedBy?.length == 0)) return null
   return <div className={cn('flex flex-col gap-2', className)}>
     {blinkoItem.references?.map(item => {

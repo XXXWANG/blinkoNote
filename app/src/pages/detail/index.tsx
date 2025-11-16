@@ -19,6 +19,20 @@ const Detail = observer(() => {
     }
   }, [location.pathname, searchParams.get('id'), blinko.updateTicker, blinko.forceQuery]);
 
+  useEffect(() => {
+    const anchor = searchParams.get('anchor');
+    if (!anchor) return;
+    const el = document.getElementById(`task-${anchor}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try {
+        const old = el.style.boxShadow;
+        el.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.6)';
+        setTimeout(() => { el.style.boxShadow = old; }, 1500);
+      } catch {}
+    }
+  }, [blinko.noteDetail.value, searchParams.get('anchor')]);
+
   return (
     <ScrollArea fixMobileTopBar>
       <div className="max-w-[800px] mx-auto p-4">
